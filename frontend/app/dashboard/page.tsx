@@ -66,6 +66,13 @@ const DashboardContent = () => {
         );
     }, [isUserOnline]);
 
+    // Start recording for the CALLER when the call is answered by the other party
+    useEffect(() => {
+        if (callState.status === "answered" && isCaller && !isRecording) {
+            startRecording(sendAudio);
+        }
+    }, [callState.status, isCaller, isRecording, startRecording, sendAudio]);
+
     const getBackendToken = async (): Promise<string | null> => {
         if (!session?.idToken) return null;
 
@@ -121,7 +128,7 @@ const DashboardContent = () => {
             }]);
         }
         await initiateCall(targetUserId);
-        await startRecording(sendAudio);
+        // Don't start recording yet - wait for the call to be answered
     };
 
     const handleAcceptCall = async () => {
