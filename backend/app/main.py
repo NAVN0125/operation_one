@@ -20,7 +20,7 @@ app = FastAPI(
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "https://n4vn.space"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

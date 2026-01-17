@@ -1,22 +1,52 @@
 services:
+  db:
+    image: mysql:8
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: call_analysis
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      timeout: 20s
+      retries: 10
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    container_name: operation_one_backend
     ports:
       - "8000:8000"
+    environment:
+      - DATABASE_URL=mysql+pymysql://root:password@db:3306/call_analysis
     env_file:
       - ./backend/.env
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     restart: always
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    container_name: operation_one_frontend
     ports:
       - "3000:3000"
     env_file:
       - ./frontend/.env
+    environment:
+      - NEXT_PUBLIC_API_URL=https://n4vn.space/service
+      - NEXTAUTH_URL=https://n4vn.space
+      - AUTH_TRUST_HOST=true
     depends_on:
       - backend
     restart: always
+
+volumes:
+  db_data:

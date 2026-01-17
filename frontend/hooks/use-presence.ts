@@ -22,16 +22,29 @@ interface IncomingCallMessage {
     room_name: string;
 }
 
-type PresenceMessage = PresenceUpdate | HeartbeatMessage | IncomingCallMessage;
+interface NewConnectionMessage {
+    type: "new_connection";
+    user: {
+        id: number;
+        name: string;
+        display_name: string | null;
+    };
+}
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const WS_URL = API_URL.replace("http", "ws");
+type PresenceMessage = PresenceUpdate | HeartbeatMessage | IncomingCallMessage | NewConnectionMessage;
+
+const getWsUrl = () => {
+    if (typeof window === "undefined") return "";
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}/service`;
+};
 
 export function usePresence() {
     const { data: session } = useSession();
     const [isConnected, setIsConnected] = useState(false);
     const [onlineUsers, setOnlineUsers] = useState<Set<number>>(new Set());
     const [incomingCall, setIncomingCall] = useState<IncomingCallMessage | null>(null);
+    const [newConnection, setNewConnection] = useState<NewConnectionMessage | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -40,7 +53,7 @@ export function usePresence() {
         if (!session?.idToken) return null;
 
         try {
-            const response = await fetch(`${API_URL}/api/auth/google`, {
+            const response = await fetch(`/service/api/auth/google`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ id_token: session.idToken }),
@@ -80,7 +93,7 @@ export function usePresence() {
             }
 
             const ws = new WebSocket(
-                `${WS_URL}/ws/presence?token=${backendToken}`
+                `${getWsUrl()}/ws/presence?token=${backendToken}`
             );
 
             ws.onopen = () => {
@@ -115,6 +128,8 @@ export function usePresence() {
                         ws.send(JSON.stringify({ type: "heartbeat_response" }));
                     } else if (message.type === "incoming_call") {
                         setIncomingCall(message);
+                    } else if (message.type === "new_connection") {
+                        setNewConnection(message);
                     }
                 } catch (error) {
                     console.error("Error parsing presence message:", error);
@@ -186,5 +201,7 @@ export function usePresence() {
         isUserOnline,
         incomingCall,
         clearIncomingCall: () => setIncomingCall(null),
+        newConnection,
+        clearNewConnection: () => setNewConnection(null),
     };
 }

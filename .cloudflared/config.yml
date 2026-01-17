@@ -1,0 +1,7 @@
+tunnel: 29cfabb3-a632-4f8f-a874-5b6a1f4bdb13
+credentials-file: /Users/n4vn/.cloudflared/29cfabb3-a632-4f8f-a874-5b6a1f4bdb13.json
+
+ingress:
+  - hostname: ssh.n4vn.space
+    service: ssh://localhost:22
+  - service: http_status:404

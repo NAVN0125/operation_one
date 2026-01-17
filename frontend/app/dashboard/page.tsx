@@ -1,19 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { CallRoom } from "@/components/call/call-room";
 import { AnalysisModal, AnalysisResult } from "@/components/analysis/analysis-modal";
 import { ConnectionList } from "@/components/connections/connection-list";
 import { useCall } from "@/hooks/use-call";
 import { useAudioRecorder } from "@/hooks/use-audio-recorder";
 import { usePresence } from "@/hooks/use-presence";
-import { User, Users } from "lucide-react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { User, Users, Phone, LogOut, Settings } from "lucide-react";
 
 interface Connection {
     id: number;
@@ -24,7 +22,7 @@ interface Connection {
     created_at: string;
 }
 
-export default function DashboardPage() {
+const DashboardContent = () => {
     const { data: session, status } = useSession();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -40,7 +38,6 @@ export default function DashboardPage() {
     const [isCaller, setIsCaller] = useState(false);
     const [activeParticipants, setActiveParticipants] = useState<{ id: number; displayName: string; isOnline: boolean }[]>([]);
 
-    // Check if we should auto-select a user from URL params
     useEffect(() => {
         const callUser = searchParams?.get('callUser');
         if (callUser) {
@@ -48,14 +45,12 @@ export default function DashboardPage() {
         }
     }, [searchParams]);
 
-    // Fetch connections
     useEffect(() => {
         if (session?.idToken) {
             fetchConnections();
         }
     }, [session]);
 
-    // Update online status in real-time
     useEffect(() => {
         setConnections((prev) =>
             prev.map((conn) => ({
@@ -63,7 +58,6 @@ export default function DashboardPage() {
                 is_online: isUserOnline(conn.connected_user_id),
             }))
         );
-        // Also update participants online status
         setActiveParticipants((prev) =>
             prev.map(p => ({
                 ...p,
@@ -76,14 +70,13 @@ export default function DashboardPage() {
         if (!session?.idToken) return null;
 
         try {
-            const response = await fetch(`${API_URL}/api/auth/google`, {
+            const response = await fetch(`/service/api/auth/google`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ id_token: session.idToken }),
             });
 
             if (response.status === 401) {
-                console.error("Backend token verification failed. Session might be expired.");
                 signOut();
                 return null;
             }
@@ -102,7 +95,7 @@ export default function DashboardPage() {
             const backendToken = await getBackendToken();
             if (!backendToken) return;
 
-            const response = await fetch(`${API_URL}/api/users/me/connections`, {
+            const response = await fetch(`/service/api/users/me/connections`, {
                 headers: {
                     Authorization: `Bearer ${backendToken}`,
                 },
@@ -128,7 +121,6 @@ export default function DashboardPage() {
             }]);
         }
         await initiateCall(targetUserId);
-        // After initiation, we are connected, start recording
         await startRecording(sendAudio);
     };
 
@@ -138,11 +130,10 @@ export default function DashboardPage() {
         setActiveParticipants([{
             id: incomingCall.caller_id,
             displayName: incomingCall.caller_display_name || incomingCall.caller_name || "Unknown",
-            isOnline: true // Presume caller is online
+            isOnline: true
         }]);
         await acceptIncomingCall(incomingCall.call_id, incomingCall.room_name);
         clearIncomingCall();
-        // Start recording after accepting
         await startRecording(sendAudio);
     };
 
@@ -170,7 +161,7 @@ export default function DashboardPage() {
             const backendToken = await getBackendToken();
             if (!backendToken) return;
 
-            const response = await fetch(`${API_URL}/api/calls/${callState.callId}/invite`, {
+            const response = await fetch(`/service/api/calls/${callState.callId}/invite`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -181,7 +172,6 @@ export default function DashboardPage() {
 
             if (response.ok) {
                 setShowInviteModal(false);
-                // Add to participants list optimistically
                 const connection = connections.find(c => c.connected_user_id === userId);
                 if (connection) {
                     setActiveParticipants(prev => {
@@ -193,8 +183,6 @@ export default function DashboardPage() {
                         }];
                     });
                 }
-            } else {
-                console.error("Failed to invite user");
             }
         } catch (error) {
             console.error("Error inviting user:", error);
@@ -204,8 +192,6 @@ export default function DashboardPage() {
     const handleAnalyze = async (interpretation: string) => {
         if (!callState.callId) return;
 
-        // Keep modal open or show loading state? 
-        // For better UX, let's close modal and show a loading indicator in the result area
         setShowAnalysisModal(false);
         setAnalysisResult("Analyzing call data... please wait.");
 
@@ -216,7 +202,7 @@ export default function DashboardPage() {
                 return;
             }
 
-            const response = await fetch(`${API_URL}/api/analysis/${callState.callId}`, {
+            const response = await fetch(`/service/api/analysis/${callState.callId}`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -226,7 +212,7 @@ export default function DashboardPage() {
             });
 
             if (!response.ok) {
-                const errorData = await response.json(); // Attempt to get error details
+                const errorData = await response.json();
                 throw new Error(errorData.detail || "Analysis failed");
             }
 
@@ -240,207 +226,223 @@ export default function DashboardPage() {
 
     if (status === "loading") {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <p className="text-muted-foreground">Loading...</p>
+            <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+                <div className="text-slate-400">Loading...</div>
             </div>
         );
     }
 
     if (!session) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800">
-                <Card className="w-full max-w-md">
-                    <CardHeader className="text-center">
-                        <CardTitle className="text-2xl">System Call Analysis</CardTitle>
-                        <CardDescription>Sign in to start analyzing your calls</CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex justify-center">
-                        <Button onClick={() => signIn("google")} size="lg">
-                            Sign in with Google
-                        </Button>
-                    </CardContent>
-                </Card>
-            </div>
-        );
+        router.push("/login");
+        return null;
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-8">
-            <div className="max-w-4xl mx-auto space-y-6">
+        <div className="min-h-screen bg-slate-950 text-white selection:bg-blue-500/30">
+            {/* Background Gradients */}
+            <div className="fixed inset-0 z-0 pointer-events-none">
+                <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[100px]" />
+                <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/10 rounded-full blur-[100px]" />
+            </div>
+
+            <div className="relative z-10 min-h-screen">
                 {/* Header */}
-                <div className="flex justify-between items-center">
+                <header className="px-6 py-4 border-b border-slate-800/50 backdrop-blur-sm bg-slate-950/50">
+                    <div className="max-w-7xl mx-auto flex items-center justify-between">
+                        <Link href="/" className="flex items-center gap-2">
+                            <div className="p-2 bg-blue-600 rounded-lg">
+                                <Phone className="w-5 h-5 text-white" />
+                            </div>
+                            <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
+                                CallAI
+                            </span>
+                        </Link>
+
+                        <div className="flex items-center gap-3">
+                            <span className="text-sm text-slate-400 hidden sm:block">
+                                {session.user?.name}
+                            </span>
+                            <Link href="/profile">
+                                <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white hover:bg-slate-800">
+                                    <User className="w-4 h-4" />
+                                </Button>
+                            </Link>
+                            <Link href="/connections">
+                                <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white hover:bg-slate-800">
+                                    <Users className="w-4 h-4" />
+                                </Button>
+                            </Link>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => signOut()}
+                                className="text-slate-400 hover:text-white hover:bg-slate-800"
+                            >
+                                <LogOut className="w-4 h-4" />
+                            </Button>
+                        </div>
+                    </div>
+                </header>
+
+                {/* Main Content */}
+                <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+                    {/* Page Title */}
                     <div>
-                        <h1 className="text-3xl font-bold text-white">Call Dashboard</h1>
-                        <p className="text-slate-400">Welcome, {session.user?.name}</p>
+                        <h1 className="text-2xl font-bold">Dashboard</h1>
+                        <p className="text-slate-400 text-sm">Manage your calls and connections</p>
                     </div>
-                    <div className="flex gap-2">
-                        <Button variant="outline" onClick={() => router.push("/profile")}>
-                            <User className="h-4 w-4 mr-2" />
-                            Profile
-                        </Button>
-                        <Button variant="outline" onClick={() => router.push("/connections")}>
-                            <Users className="h-4 w-4 mr-2" />
-                            Connections
-                        </Button>
-                        <Button variant="outline" onClick={() => signOut()}>
-                            Sign Out
-                        </Button>
-                    </div>
-                </div>
 
-                {/* Error Display */}
-                {error && (
-                    <Card className="border-red-500 bg-red-500/10">
-                        <CardContent className="pt-4">
+                    {/* Error Display */}
+                    {error && (
+                        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20">
                             <p className="text-red-400">{error}</p>
-                        </CardContent>
-                    </Card>
-                )}
+                        </div>
+                    )}
 
-                {/* Call Interface */}
-                {callState.status === "idle" || callState.status === "ended" ? (
-                    selectedUserId ? (
-                        <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-700">
-                            <CardHeader>
-                                <CardTitle className="text-white">Ready to Call</CardTitle>
-                                <CardDescription className="text-slate-400">
+                    {/* Call Interface */}
+                    {callState.status === "idle" || callState.status === "ended" ? (
+                        selectedUserId ? (
+                            <div className="p-6 rounded-2xl bg-slate-900/50 border border-slate-800 backdrop-blur-sm">
+                                <h2 className="text-lg font-semibold mb-2">Ready to Call</h2>
+                                <p className="text-slate-400 mb-4">
                                     {connections.find(c => c.connected_user_id === selectedUserId)?.connected_user_display_name || "Selected User"}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="flex gap-2">
-                                <Button onClick={() => handleStartCall(selectedUserId)} disabled={isLoading} size="lg">
-                                    {isLoading ? "Starting..." : "Start Call"}
-                                </Button>
-                                <Button variant="outline" onClick={() => setSelectedUserId(null)}>
-                                    Cancel
-                                </Button>
-                            </CardContent>
-                        </Card>
+                                </p>
+                                <div className="flex gap-3">
+                                    <Button
+                                        onClick={() => handleStartCall(selectedUserId)}
+                                        disabled={isLoading}
+                                        className="bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-500/20"
+                                    >
+                                        {isLoading ? "Starting..." : "Start Call"}
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setSelectedUserId(null)}
+                                        className="border-slate-700 bg-slate-900/50 hover:bg-slate-800"
+                                    >
+                                        Cancel
+                                    </Button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="p-6 rounded-2xl bg-slate-900/50 border border-slate-800 backdrop-blur-sm">
+                                <h2 className="text-lg font-semibold mb-4">Your Connections</h2>
+                                <ConnectionList
+                                    connections={connections}
+                                    onCall={(userId) => setSelectedUserId(userId)}
+                                    onRemove={async (userId) => {
+                                        try {
+                                            const backendToken = await getBackendToken();
+                                            if (!backendToken) return;
+
+                                            await fetch(`/service/api/users/me/connections/${userId}`, {
+                                                method: "DELETE",
+                                                headers: { Authorization: `Bearer ${backendToken}` },
+                                            });
+                                            fetchConnections();
+                                        } catch (error) {
+                                            console.error("Error removing connection:", error);
+                                        }
+                                    }}
+                                />
+                            </div>
+                        )
                     ) : (
-                        <ConnectionList
-                            connections={connections}
-                            onCall={(userId) => setSelectedUserId(userId)}
-                            onRemove={async (userId) => {
-                                // Remove connection logic
-                                try {
-                                    const backendToken = await getBackendToken();
-                                    if (!backendToken) return;
-
-                                    await fetch(`http://localhost:8000/api/users/me/connections/${userId}`, {
-                                        method: "DELETE",
-                                        headers: { Authorization: `Bearer ${backendToken}` },
-                                    });
-                                    fetchConnections();
-                                } catch (error) {
-                                    console.error("Error removing connection:", error);
-                                }
-                            }}
+                        <CallRoom
+                            roomName={callState.roomName || "Unknown"}
+                            status={callState.status as "connected" | "answered" | "ended"}
+                            participants={activeParticipants}
+                            isCaller={isCaller}
+                            onCallAnswered={handleAnswerCall}
+                            onCallEnd={handleEndCall}
+                            onInviteParticipant={() => setShowInviteModal(true)}
+                            onAudioData={sendAudio}
                         />
-                    )
-                ) : (
-                    <CallRoom
-                        roomName={callState.roomName || "Unknown"}
-                        status={callState.status as "connected" | "answered" | "ended"}
-                        participants={activeParticipants}
-                        isCaller={isCaller}
-                        onCallAnswered={handleAnswerCall}
-                        onCallEnd={handleEndCall}
-                        onInviteParticipant={() => setShowInviteModal(true)}
-                        onAudioData={sendAudio}
-                    />
-                )}
+                    )}
 
-                {/* Recording Status */}
-                {isRecording && (
-                    <Card className="border-red-500 bg-red-500/10">
-                        <CardContent className="pt-4 flex items-center gap-2">
+                    {/* Recording Status */}
+                    {isRecording && (
+                        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-3">
                             <span className="h-3 w-3 bg-red-500 rounded-full animate-pulse" />
                             <span className="text-red-400">Streaming audio to server...</span>
-                        </CardContent>
-                    </Card>
-                )}
+                        </div>
+                    )}
 
-                {/* Audio Playback */}
-                {audioUrl && !isRecording && (
-                    <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-700">
-                        <CardHeader>
-                            <CardTitle className="text-white">Call Recording</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
+                    {/* Audio Playback */}
+                    {audioUrl && !isRecording && (
+                        <div className="p-6 rounded-2xl bg-slate-900/50 border border-slate-800 backdrop-blur-sm space-y-4">
+                            <h2 className="text-lg font-semibold">Call Recording</h2>
                             <audio src={audioUrl} controls className="w-full" />
-                            <Button variant="outline" onClick={clearRecording} className="text-white border-slate-700 hover:bg-slate-800">
+                            <Button
+                                variant="outline"
+                                onClick={clearRecording}
+                                className="border-slate-700 bg-slate-900/50 hover:bg-slate-800"
+                            >
                                 Clear Recording
                             </Button>
-                        </CardContent>
-                    </Card>
-                )}
+                        </div>
+                    )}
 
-                {/* Transcript Display */}
-                {transcript && (
-                    <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-700">
-                        <CardHeader>
-                            <CardTitle className="text-white">Live Transcript</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="bg-slate-950/50 p-4 rounded-md border border-slate-800 min-h-[100px]">
+                    {/* Transcript Display */}
+                    {transcript && (
+                        <div className="p-6 rounded-2xl bg-slate-900/50 border border-slate-800 backdrop-blur-sm">
+                            <h2 className="text-lg font-semibold mb-4">Live Transcript</h2>
+                            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800 min-h-[100px]">
                                 <p className="whitespace-pre-wrap text-slate-300">{transcript}</p>
                             </div>
-                        </CardContent>
-                    </Card>
-                )}
+                        </div>
+                    )}
 
-                {/* Analysis Result */}
-                {analysisResult && <AnalysisResult result={analysisResult} />}
+                    {/* Analysis Result */}
+                    {analysisResult && <AnalysisResult result={analysisResult} />}
 
-                {/* Analysis Modal */}
-                <AnalysisModal
-                    isOpen={showAnalysisModal}
-                    onClose={() => setShowAnalysisModal(false)}
-                    onSubmit={handleAnalyze}
-                />
+                    {/* Analysis Modal */}
+                    <AnalysisModal
+                        isOpen={showAnalysisModal}
+                        onClose={() => setShowAnalysisModal(false)}
+                        onSubmit={handleAnalyze}
+                    />
 
-                {/* Incoming Call Modal */}
-                {incomingCall && (
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
-                        <Card className="w-full max-w-md bg-slate-900 border-slate-700 animate-in fade-in zoom-in-95 duration-200">
-                            <CardHeader className="text-center">
-                                <CardTitle className="text-2xl text-white">Incoming Call</CardTitle>
-                                <CardDescription className="text-slate-400">
+                    {/* Incoming Call Modal */}
+                    {incomingCall && (
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
+                            <div className="w-full max-w-md p-8 rounded-2xl bg-slate-900/90 border border-slate-800 backdrop-blur-sm text-center">
+                                <div className="inline-flex p-4 bg-green-600/20 rounded-full mb-4">
+                                    <Phone className="w-8 h-8 text-green-400 animate-pulse" />
+                                </div>
+                                <h2 className="text-2xl font-bold mb-2">Incoming Call</h2>
+                                <p className="text-slate-400 mb-6">
                                     {incomingCall.caller_display_name || incomingCall.caller_name || "Unknown User"} is calling...
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="flex justify-center gap-4">
-                                <Button
-                                    onClick={handleDeclineCall}
-                                    variant="destructive"
-                                    className="w-32"
-                                >
-                                    Decline
-                                </Button>
-                                <Button
-                                    onClick={handleAcceptCall}
-                                    className="w-32 bg-green-600 hover:bg-green-700 text-white"
-                                >
-                                    Accept
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    </div>
-                )}
+                                </p>
+                                <div className="flex justify-center gap-4">
+                                    <Button
+                                        onClick={handleDeclineCall}
+                                        variant="outline"
+                                        className="w-32 border-red-500/50 text-red-400 hover:bg-red-500/10"
+                                    >
+                                        Decline
+                                    </Button>
+                                    <Button
+                                        onClick={handleAcceptCall}
+                                        className="w-32 bg-green-600 hover:bg-green-500"
+                                    >
+                                        Accept
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
-                {/* Invite Modal */}
-                {showInviteModal && (
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
-                        <Card className="w-full max-w-md bg-slate-900 border-slate-700 animate-in fade-in zoom-in-95 duration-200">
-                            <CardHeader>
-                                <CardTitle className="text-white">Invite to Call</CardTitle>
-                                <CardDescription className="text-slate-400">Select a connection to invite</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
+                    {/* Invite Modal */}
+                    {showInviteModal && (
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
+                            <div className="w-full max-w-md p-6 rounded-2xl bg-slate-900/90 border border-slate-800 backdrop-blur-sm">
+                                <h2 className="text-xl font-bold mb-2">Invite to Call</h2>
+                                <p className="text-slate-400 text-sm mb-4">Select a connection to invite</p>
                                 <div className="space-y-2 max-h-[300px] overflow-y-auto">
                                     {connections.map((conn) => (
-                                        <div key={conn.id} className="flex items-center justify-between p-2 rounded hover:bg-slate-800">
-                                            <div className="flex items-center gap-2 text-white">
+                                        <div key={conn.id} className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-800/50 transition-colors">
+                                            <div className="flex items-center gap-3">
                                                 <div className={`h-2 w-2 rounded-full ${conn.is_online ? "bg-green-500" : "bg-slate-500"}`} />
                                                 <span>{conn.connected_user_display_name || conn.connected_user_name}</span>
                                             </div>
@@ -449,6 +451,7 @@ export default function DashboardPage() {
                                                 variant="outline"
                                                 onClick={() => handleInviteUser(conn.connected_user_id)}
                                                 disabled={activeParticipants.some(p => p.id === conn.connected_user_id)}
+                                                className="border-slate-700 bg-slate-900/50 hover:bg-slate-800"
                                             >
                                                 {activeParticipants.some(p => p.id === conn.connected_user_id) ? "In Call" : "Invite"}
                                             </Button>
@@ -458,14 +461,28 @@ export default function DashboardPage() {
                                         <p className="text-slate-500 text-center py-4">No connections found</p>
                                     )}
                                 </div>
-                                <div className="flex justify-end">
-                                    <Button variant="ghost" onClick={() => setShowInviteModal(false)}>Close</Button>
+                                <div className="flex justify-end mt-4">
+                                    <Button
+                                        variant="ghost"
+                                        onClick={() => setShowInviteModal(false)}
+                                        className="text-slate-400 hover:text-white"
+                                    >
+                                        Close
+                                    </Button>
                                 </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-                )}
+                            </div>
+                        </div>
+                    )}
+                </main>
             </div>
         </div>
+    );
+};
+
+export default function DashboardPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">Loading...</div>}>
+            <DashboardContent />
+        </Suspense>
     );
 }

@@ -21,8 +21,11 @@ interface UseCallReturn {
     error: string | null;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const WS_URL = API_URL.replace("http", "ws");
+const getWsUrl = () => {
+    if (typeof window === "undefined") return "";
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}/service`;
+};
 
 export function useCall(): UseCallReturn {
     const { data: session } = useSession();
@@ -40,7 +43,7 @@ export function useCall(): UseCallReturn {
     const getBackendToken = useCallback(async (): Promise<string | null> => {
         if (!session?.idToken) return null;
 
-        const response = await fetch(`${API_URL}/api/auth/google`, {
+        const response = await fetch(`/service/api/auth/google`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id_token: session.idToken }),
@@ -161,7 +164,7 @@ export function useCall(): UseCallReturn {
             wsRef.current.close();
         }
 
-        const socket = new WebSocket(`${WS_URL}/ws/call/${callId}?token=${backendToken}`);
+        const socket = new WebSocket(`${getWsUrl()}/ws/call/${callId}?token=${backendToken}`);
 
         socket.onopen = () => {
             setCallState({
@@ -221,7 +224,7 @@ export function useCall(): UseCallReturn {
                 const backendToken = await getBackendToken();
                 if (!backendToken) throw new Error("Not authenticated");
 
-                const response = await fetch(`${API_URL}/api/calls/initiate`, {
+                const response = await fetch(`/service/api/calls/initiate`, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -264,7 +267,7 @@ export function useCall(): UseCallReturn {
                     // onopen handler in connectToWebSocket will run.
                     // But we want to trigger 'answer' API call too.
 
-                    const response = await fetch(`${API_URL}/api/calls/${callId}/answer`, {
+                    const response = await fetch(`/service/api/calls/${callId}/answer`, {
                         method: "POST",
                         headers: { Authorization: `Bearer ${backendToken}` },
                     });
@@ -302,7 +305,7 @@ export function useCall(): UseCallReturn {
         try {
             const backendToken = await getBackendToken();
             if (!backendToken) throw new Error("Not authenticated");
-            const response = await fetch(`${API_URL}/api/calls/${callState.callId}/answer`, {
+            const response = await fetch(`/service/api/calls/${callState.callId}/answer`, {
                 method: "POST",
                 headers: { Authorization: `Bearer ${backendToken}` },
             });
@@ -328,7 +331,7 @@ export function useCall(): UseCallReturn {
                 wsRef.current.send(JSON.stringify({ type: "stop_transcription" }));
                 wsRef.current.close();
             }
-            await fetch(`${API_URL}/api/calls/${callState.callId}/end`, {
+            await fetch(`/service/api/calls/${callState.callId}/end`, {
                 method: "POST",
                 headers: { Authorization: `Bearer ${backendToken}` },
             });

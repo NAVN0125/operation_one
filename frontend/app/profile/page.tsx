@@ -3,10 +3,10 @@
 import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Copy, RefreshCw, Check } from "lucide-react";
+import { Copy, RefreshCw, Check, Phone, ArrowLeft, LogOut } from "lucide-react";
 
 interface UserProfile {
     id: number;
@@ -16,8 +16,6 @@ interface UserProfile {
     connection_code: string | null;
     connection_code_expires_at: string | null;
 }
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function ProfilePage() {
     const { data: session, status } = useSession();
@@ -35,14 +33,13 @@ export default function ProfilePage() {
         if (!session?.idToken) return null;
 
         try {
-            const response = await fetch(`${API_URL}/api/auth/google`, {
+            const response = await fetch(`/service/api/auth/google`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ id_token: session.idToken }),
             });
 
             if (response.status === 401) {
-                console.error("Backend token verification failed. Session might be expired.");
                 signOut();
                 return null;
             }
@@ -58,7 +55,7 @@ export default function ProfilePage() {
 
     useEffect(() => {
         if (status === "unauthenticated") {
-            router.push("/dashboard");
+            router.push("/login");
             return;
         }
 
@@ -98,7 +95,7 @@ export default function ProfilePage() {
             const backendToken = await getBackendToken();
             if (!backendToken) return;
 
-            const response = await fetch(`${API_URL}/api/users/me/profile`, {
+            const response = await fetch(`/service/api/users/me/profile`, {
                 headers: {
                     Authorization: `Bearer ${backendToken}`,
                 },
@@ -122,7 +119,7 @@ export default function ProfilePage() {
             const backendToken = await getBackendToken();
             if (!backendToken) return;
 
-            const response = await fetch(`${API_URL}/api/users/me/profile`, {
+            const response = await fetch(`/service/api/users/me/profile`, {
                 method: "PUT",
                 headers: {
                     "Content-Type": "application/json",
@@ -149,7 +146,7 @@ export default function ProfilePage() {
             const backendToken = await getBackendToken();
             if (!backendToken) return;
 
-            const response = await fetch(`${API_URL}/api/users/me/refresh-code`, {
+            const response = await fetch(`/service/api/users/me/refresh-code`, {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${backendToken}`,
@@ -177,47 +174,79 @@ export default function ProfilePage() {
 
     if (!profile) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-8 flex flex-col items-center justify-center space-y-4">
+            <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center space-y-4">
                 <p className="text-slate-400">Loading profile...</p>
-                <div className="flex flex-col items-center gap-2">
-                    <p className="text-xs text-slate-500">Stuck? Your session might have expired.</p>
-                    <Button variant="outline" size="sm" onClick={() => signOut()}>
-                        Sign Out & Re-login
-                    </Button>
-                </div>
+                <Button variant="outline" size="sm" onClick={() => signOut()} className="border-slate-700 text-slate-300">
+                    Sign Out & Re-login
+                </Button>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-8">
-            <div className="max-w-2xl mx-auto space-y-6">
-                <div className="flex justify-between items-center">
-                    <h1 className="text-3xl font-bold text-white">Profile</h1>
-                    <Button variant="outline" onClick={() => router.push("/dashboard")}>
-                        Back to Dashboard
-                    </Button>
-                </div>
+        <div className="min-h-screen bg-slate-950 text-white selection:bg-blue-500/30">
+            {/* Background Gradients */}
+            <div className="fixed inset-0 z-0 pointer-events-none">
+                <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[100px]" />
+                <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/10 rounded-full blur-[100px]" />
+            </div>
 
-                {/* Connection Code Card */}
-                <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-700">
-                    <CardHeader>
-                        <CardTitle className="text-white">Your Connection Code</CardTitle>
-                        <CardDescription className="text-slate-400">
-                            Share this code with others to connect. It expires in 5 minutes.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
+            <div className="relative z-10 min-h-screen">
+                {/* Header */}
+                <header className="px-6 py-4 border-b border-slate-800/50 backdrop-blur-sm bg-slate-950/50">
+                    <div className="max-w-7xl mx-auto flex items-center justify-between">
+                        <Link href="/" className="flex items-center gap-2">
+                            <div className="p-2 bg-blue-600 rounded-lg">
+                                <Phone className="w-5 h-5 text-white" />
+                            </div>
+                            <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
+                                CallAI
+                            </span>
+                        </Link>
+
                         <div className="flex items-center gap-3">
-                            <div className="flex-1 bg-slate-800 p-4 rounded-lg border border-slate-700">
-                                <p className="text-3xl font-mono font-bold text-white tracking-wider text-center">
+                            <Link href="/dashboard">
+                                <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white hover:bg-slate-800">
+                                    <ArrowLeft className="w-4 h-4 mr-2" />
+                                    Dashboard
+                                </Button>
+                            </Link>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => signOut()}
+                                className="text-slate-400 hover:text-white hover:bg-slate-800"
+                            >
+                                <LogOut className="w-4 h-4" />
+                            </Button>
+                        </div>
+                    </div>
+                </header>
+
+                {/* Main Content */}
+                <main className="max-w-2xl mx-auto px-6 py-8 space-y-6">
+                    {/* Page Title */}
+                    <div>
+                        <h1 className="text-2xl font-bold">Profile</h1>
+                        <p className="text-slate-400 text-sm">Manage your account settings</p>
+                    </div>
+
+                    {/* Connection Code Card */}
+                    <div className="p-6 rounded-2xl bg-slate-900/50 border border-slate-800 backdrop-blur-sm">
+                        <h2 className="text-lg font-semibold mb-1">Your Connection Code</h2>
+                        <p className="text-slate-400 text-sm mb-4">
+                            Share this code with others to connect. It expires in 5 minutes.
+                        </p>
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="flex-1 bg-slate-950/50 p-4 rounded-xl border border-slate-800">
+                                <p className="text-3xl font-mono font-bold text-center tracking-wider">
                                     {profile.connection_code || "LOADING"}
                                 </p>
                             </div>
                             <Button
                                 size="icon"
                                 onClick={handleCopyCode}
-                                className="bg-blue-600 hover:bg-blue-700"
+                                className="h-12 w-12 bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-500/20"
                             >
                                 {copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
                             </Button>
@@ -226,8 +255,7 @@ export default function ProfilePage() {
                         <div className="flex items-center justify-between">
                             <div className="text-sm">
                                 <span className="text-slate-400">Expires in: </span>
-                                <span className={`font-mono font-semibold ${timeRemaining === "Expired" ? "text-red-400" : "text-green-400"
-                                    }`}>
+                                <span className={`font-mono font-semibold ${timeRemaining === "Expired" ? "text-red-400" : "text-green-400"}`}>
                                     {timeRemaining}
                                 </span>
                             </div>
@@ -236,24 +264,21 @@ export default function ProfilePage() {
                                 variant="outline"
                                 onClick={handleRefreshCode}
                                 disabled={isRefreshing}
-                                className="border-slate-600 text-white hover:bg-slate-800"
+                                className="border-slate-700 bg-slate-900/50 hover:bg-slate-800"
                             >
                                 <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
                                 Refresh Code
                             </Button>
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
 
-                {/* Profile Info Card */}
-                <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-700">
-                    <CardHeader>
-                        <CardTitle className="text-white">Profile Information</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
+                    {/* Profile Info Card */}
+                    <div className="p-6 rounded-2xl bg-slate-900/50 border border-slate-800 backdrop-blur-sm space-y-4">
+                        <h2 className="text-lg font-semibold">Profile Information</h2>
+
                         <div>
                             <label className="text-sm text-slate-400">Email</label>
-                            <p className="text-white">{profile.email}</p>
+                            <p className="text-white mt-1">{profile.email}</p>
                         </div>
 
                         <div>
@@ -263,13 +288,21 @@ export default function ProfilePage() {
                                     <Input
                                         value={displayName}
                                         onChange={(e) => setDisplayName(e.target.value)}
-                                        className="bg-slate-800 border-slate-700 text-white"
+                                        className="bg-slate-950/50 border-slate-700 text-white focus:border-blue-500"
                                         placeholder="Enter display name"
                                     />
-                                    <Button onClick={handleSaveDisplayName} disabled={isSaving}>
+                                    <Button
+                                        onClick={handleSaveDisplayName}
+                                        disabled={isSaving}
+                                        className="bg-blue-600 hover:bg-blue-500"
+                                    >
                                         {isSaving ? "Saving..." : "Save"}
                                     </Button>
-                                    <Button variant="outline" onClick={() => setIsEditing(false)}>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setIsEditing(false)}
+                                        className="border-slate-700 hover:bg-slate-800"
+                                    >
                                         Cancel
                                     </Button>
                                 </div>
@@ -278,14 +311,19 @@ export default function ProfilePage() {
                                     <p className="text-white">
                                         {profile.display_name || profile.name || "Not set"}
                                     </p>
-                                    <Button size="sm" variant="outline" onClick={() => setIsEditing(true)}>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => setIsEditing(true)}
+                                        className="border-slate-700 bg-slate-900/50 hover:bg-slate-800"
+                                    >
                                         Edit
                                     </Button>
                                 </div>
                             )}
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
+                </main>
             </div>
         </div>
     );

@@ -10,6 +10,7 @@ from datetime import datetime
 from app.db.session import get_db
 from app.db.models import User, UserConnection, UserPresence
 from app.core.security import get_current_user, TokenPayload
+from app.websockets.presence_handler import presence_manager
 
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -39,7 +40,7 @@ class UserSearchResult(BaseModel):
 
 
 class AddConnectionRequest(BaseModel):
-    connection_code: str
+    user_id: int
 
 
 class ConnectionResponse(BaseModel):
@@ -254,15 +255,13 @@ async def add_connection(
     """Add a new connection using their connection code."""
     user_id = int(current_user.sub)
     
-    # Find user by connection code
-    target_user = db.query(User).filter(
-        User.connection_code == request.connection_code.upper()
-    ).first()
+    # Find user by ID
+    target_user = db.query(User).filter(User.id == request.user_id).first()
     
-    if not target_user or not target_user.is_connection_code_valid():
+    if not target_user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Invalid or expired connection code",
+            detail="User not found",
         )
     
     if target_user.id == user_id:
@@ -291,6 +290,20 @@ async def add_connection(
     db.add(connection)
     db.commit()
     db.refresh(connection)
+    
+    # Notify target user via WebSocket
+    current_user_obj = db.query(User).filter(User.id == user_id).first()
+    await presence_manager.send_personal_message(
+        target_user.id,
+        {
+            "type": "new_connection",
+            "user": {
+                "id": user_id,
+                "name": current_user_obj.name if current_user_obj else "Unknown",
+                "display_name": current_user_obj.display_name if current_user_obj else None
+            }
+        }
+    )
     
     # Get presence info
     presence = db.query(UserPresence).filter(UserPresence.user_id == target_user.id).first()

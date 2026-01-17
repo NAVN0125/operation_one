@@ -71,7 +71,8 @@ async def verify_google_token(id_token: str) -> GoogleUser:
         async with httpx.AsyncClient() as client:
             print(f"Verifying Google token (length: {len(id_token if id_token else '')})")
             response = await client.get(
-                f"https://oauth2.googleapis.com/tokeninfo?id_token={id_token}"
+                "https://oauth2.googleapis.com/tokeninfo",
+                params={"id_token": id_token}
             )
             if response.status_code != 200:
                 print(f"Google token verification failed: {response.status_code} - {response.text}")
