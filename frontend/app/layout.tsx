@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "System Call Analysis",
+  title: "Operation One",
   description: "Real-time call transcription and analysis platform",
 };
 

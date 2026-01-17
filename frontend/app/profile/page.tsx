@@ -200,7 +200,7 @@ export default function ProfilePage() {
                                 <Phone className="w-5 h-5 text-white" />
                             </div>
                             <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
-                                CallAI
+                                Operation One
                             </span>
                         </Link>
 

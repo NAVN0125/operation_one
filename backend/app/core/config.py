@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
     # App
-    app_name: str = "System Call Analysis"
+    app_name: str = "Operation One"
     debug: bool = False
     
     # Database

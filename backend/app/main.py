@@ -1,5 +1,5 @@
 """
-System Call Analysis - FastAPI Backend
+Operation One - FastAPI Backend
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,7 +12,7 @@ from app.websockets.call_handler import router as ws_router
 from app.websockets.presence_handler import router as presence_router
 
 app = FastAPI(
-    title="System Call Analysis API",
+    title="Operation One API",
     description="Backend for VoIP, Transcription, and Call Analysis",
     version="0.1.0",
 )
@@ -37,7 +37,7 @@ app.include_router(presence_router)
 
 @app.get("/")
 async def root():
-    return {"message": "System Call Analysis API is running"}
+    return {"message": "Operation One API is running"}
 
 
 @app.get("/health")
