@@ -70,26 +70,33 @@ async def verify_google_token(id_token: str) -> GoogleUser:
     try:
         async with httpx.AsyncClient() as client:
             print(f"Verifying Google token (length: {len(id_token if id_token else '')})")
-            response = await client.get(
+            # Use POST for tokeninfo as it's more robust for long tokens
+            response = await client.post(
                 "https://oauth2.googleapis.com/tokeninfo",
-                params={"id_token": id_token}
+                data={"id_token": id_token}
             )
             if response.status_code != 200:
                 print(f"Google token verification failed: {response.status_code} - {response.text}")
+                # Log a snippet of the token for debugging (don't log the whole thing for security)
+                if id_token:
+                    print(f"Token snippet: {id_token[:20]}...{id_token[-20:]}")
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail=f"Invalid Google token: {response.text}",
                 )
             data = response.json()
+            print(f"Google token info response: {data}")
             return GoogleUser(
-                sub=data["sub"],
-                email=data["email"],
+                sub=data.get("sub") or data.get("user_id"), # Handle variations
+                email=data.get("email"),
                 name=data.get("name"),
                 picture=data.get("picture"),
             )
     except Exception as e:
         if not isinstance(e, HTTPException):
             print(f"Error during Google token verification: {str(e)}")
+            import traceback
+            traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Failed to verify Google token: {str(e)}",

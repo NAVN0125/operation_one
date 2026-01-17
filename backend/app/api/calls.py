@@ -12,6 +12,7 @@ from app.db.session import get_db
 from app.db.models import Call, CallStatus, UserConnection, CallParticipant, User
 from app.core.security import get_current_user, TokenPayload
 from app.websockets.presence_handler import presence_manager
+from app.websockets.connection_manager import manager
 
 
 router = APIRouter(prefix="/calls", tags=["calls"])
@@ -210,6 +211,9 @@ async def answer_call(
 
     call.status = CallStatus.PICKED_UP
     db.commit()
+
+    # Notify participants via WebSocket that the call is answered
+    await manager.broadcast(call_id, {"type": "call_answered", "call_id": call_id})
 
     return {"message": "Call answered", "status": CallStatus.PICKED_UP.value}
 

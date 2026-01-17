@@ -1,7 +1,14 @@
-tunnel: 29cfabb3-a632-4f8f-a874-5b6a1f4bdb13
-credentials-file: /Users/n4vn/.cloudflared/29cfabb3-a632-4f8f-a874-5b6a1f4bdb13.json
+tunnel: 52ea5dd5-66b3-4192-9e04-344aee7c2a0b
+credentials-file: /Users/n4vn/.cloudflared/52ea5dd5-66b3-4192-9e04-344aee7c2a0b.json
 
 ingress:
+  - hostname: n4vn.space
+    service: http://localhost:3000
   - hostname: ssh.n4vn.space
     service: ssh://localhost:22
   - service: http_status:404
+
+# To connect to this machine via SSH, add the following to your ~/.ssh/config:
+# Host ssh.n4vn.space
+#   User n4vn
+#   ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h

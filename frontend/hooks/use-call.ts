@@ -88,6 +88,9 @@ export function useCall(): UseCallReturn {
                     sourceBuffer.addEventListener("updateend", () => {
                         processAudioQueue();
                     });
+
+                    // Start processing queue immediately if chunks already arrived
+                    processAudioQueue();
                 } catch (e) {
                     console.error("Error creating SourceBuffer:", e);
                 }
@@ -159,59 +162,66 @@ export function useCall(): UseCallReturn {
         audioQueueRef.current = [];
     }, []);
 
-    const connectToWebSocket = useCallback(async (callId: number, roomName: string | null, backendToken: string) => {
-        if (wsRef.current) {
-            wsRef.current.close();
-        }
-
-        const socket = new WebSocket(`${getWsUrl()}/ws/call/${callId}?token=${backendToken}`);
-
-        socket.onopen = () => {
-            setCallState({
-                callId: callId,
-                roomName: roomName,
-                status: "connected",
-            });
-            wsRef.current = socket;
-            initAudioPlayer();
-        };
-
-        socket.onmessage = async (event) => {
-            const message = JSON.parse(event.data);
-            if (message.type === "transcript") {
-                if (message.is_final) {
-                    setTranscript((prev) => prev + " " + message.text);
-                }
-            } else if (message.type === "audio") {
-                // Play audio
-                try {
-                    const audioData = atob(message.data);
-                    const arrayBuffer = new ArrayBuffer(audioData.length);
-                    const view = new Uint8Array(arrayBuffer);
-                    for (let i = 0; i < audioData.length; i++) {
-                        view[i] = audioData.charCodeAt(i);
-                    }
-
-                    audioQueueRef.current.push(arrayBuffer);
-                    processAudioQueue();
-                } catch (e) {
-                    console.error("Error processing audio data:", e);
-                }
+    const connectToWebSocket = useCallback((callId: number, roomName: string | null, backendToken: string): Promise<WebSocket> => {
+        return new Promise((resolve, reject) => {
+            if (wsRef.current) {
+                wsRef.current.close();
             }
-        };
 
-        socket.onerror = (err) => {
-            console.error("WebSocket error:", err);
-            setError("WebSocket connection failed");
-        };
+            const socket = new WebSocket(`${getWsUrl()}/ws/call/${callId}?token=${backendToken}`);
 
-        socket.onclose = () => {
-            setCallState((prev) => ({ ...prev, status: "ended" }));
-            wsRef.current = null;
-            cleanupAudio();
-        };
+            socket.onopen = () => {
+                setCallState({
+                    callId: callId,
+                    roomName: roomName,
+                    status: "connected",
+                });
+                wsRef.current = socket;
+                initAudioPlayer();
+                resolve(socket);
+            };
 
-        return socket;
+            socket.onmessage = async (event) => {
+                const message = JSON.parse(event.data);
+                if (message.type === "transcript") {
+                    if (message.is_final) {
+                        setTranscript((prev) => prev + " " + message.text);
+                    }
+                } else if (message.type === "audio") {
+                    // Play audio
+                    try {
+                        const audioData = atob(message.data);
+                        const arrayBuffer = new ArrayBuffer(audioData.length);
+                        const view = new Uint8Array(arrayBuffer);
+                        for (let i = 0; i < audioData.length; i++) {
+                            view[i] = audioData.charCodeAt(i);
+                        }
+
+                        audioQueueRef.current.push(arrayBuffer);
+                        processAudioQueue();
+                    } catch (e) {
+                        console.error("Error processing audio data:", e);
+                    }
+                } else if (message.type === "call_answered") {
+                    console.log("Call answered by other participant");
+                    setCallState((prev) => ({ ...prev, status: "answered" }));
+                } else if (message.type === "status") {
+                    console.log("Status message from server:", message.message);
+                }
+            };
+
+            socket.onerror = (err) => {
+                console.error("WebSocket error:", err);
+                setError("WebSocket connection failed");
+                reject(err);
+            };
+
+            socket.onclose = () => {
+                setCallState((prev) => ({ ...prev, status: "ended" }));
+                wsRef.current = null;
+                cleanupAudio();
+            };
+        });
     }, [initAudioPlayer, processAudioQueue, cleanupAudio, session]);
 
     const initiateCall = useCallback(
@@ -258,15 +268,11 @@ export function useCall(): UseCallReturn {
                 const backendToken = await getBackendToken();
                 if (!backendToken) throw new Error("Not authenticated");
 
+                // Wait for the socket to fully connect
                 const socket = await connectToWebSocket(callId, roomName, backendToken);
 
                 // Automatically answer the call
                 if (socket) {
-                    // Wait for connection open? connectToWebSocket sets handler. 
-                    // But we need to verify if it is open before sending? 
-                    // onopen handler in connectToWebSocket will run.
-                    // But we want to trigger 'answer' API call too.
-
                     const response = await fetch(`/service/api/calls/${callId}/answer`, {
                         method: "POST",
                         headers: { Authorization: `Bearer ${backendToken}` },
@@ -274,18 +280,9 @@ export function useCall(): UseCallReturn {
 
                     if (!response.ok) throw new Error("Failed to answer call");
 
-                    // Send start transcription when socket opens
-                    if (socket.readyState === WebSocket.OPEN) {
-                        socket.send(JSON.stringify({ type: "start_transcription" }));
-                        setCallState((prev) => ({ ...prev, status: "answered" }));
-                    } else {
-                        const originalOnOpen = socket.onopen;
-                        socket.onopen = (ev) => {
-                            if (originalOnOpen) originalOnOpen.call(socket, ev);
-                            socket.send(JSON.stringify({ type: "start_transcription" }));
-                            setCallState((prev) => ({ ...prev, status: "answered" }));
-                        };
-                    }
+                    // Socket is guaranteed to be OPEN here
+                    socket.send(JSON.stringify({ type: "start_transcription" }));
+                    setCallState((prev) => ({ ...prev, status: "answered" }));
                 }
 
             } catch (err) {

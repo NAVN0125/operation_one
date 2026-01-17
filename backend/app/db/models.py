@@ -71,7 +71,7 @@ class Call(Base):
     caller_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     callee_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     room_id = Column(String(255), index=True, nullable=True)
-    status = Column(Enum(CallStatus), default=CallStatus.INITIATED)
+    status = Column(Enum(CallStatus, values_callable=lambda x: [e.value for e in x]), default=CallStatus.INITIATED)
     started_at = Column(DateTime(timezone=True), server_default=func.now())
     ended_at = Column(DateTime(timezone=True), nullable=True)
     duration_seconds = Column(Integer, nullable=True)
