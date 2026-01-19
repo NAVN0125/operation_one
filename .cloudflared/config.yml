@@ -1,5 +1,7 @@
 tunnel: 52ea5dd5-66b3-4192-9e04-344aee7c2a0b
 credentials-file: /Users/n4vn/.cloudflared/52ea5dd5-66b3-4192-9e04-344aee7c2a0b.json
+protocol: http2
+
 
 ingress:
   - hostname: operation1.n4vn.space
